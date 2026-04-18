@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+ENV/
+env/
+
+# Distribution / packaging
+.Python
+build/
+dist/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Pytest
+.cache/
+
+# Environments
+.env
+.env.local
+.env.*.local
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+backend*.log
+frontend*.log
+
+# Node
+node_modules/
+/npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
