@@ -17,12 +17,10 @@ import os
 import re
 from typing import Optional
 
+from utils.runtime import has_ai_provider_keys
+
 # Define execution mode
-USE_LLM = any([
-    os.getenv("GROQ_API_KEY"),
-    os.getenv("OPENAI_API_KEY"),
-    os.getenv("OPENROUTER_API_KEY")
-])
+USE_LLM = has_ai_provider_keys()
 
 PLAN_SCHEMA_REQUIRED_TOOLS = {"create_storage", "allocate_compute", "deploy_service"}
 SERVICE_SUFFIXES = {"api", "service", "app", "backend", "frontend", "worker", "pipeline"}

@@ -12,13 +12,13 @@ V2 additions:
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable
 
 from agents.master_agent import plan as master_plan
 from agents.verification_agent import verify
 from tools.cloud_tools import create_storage, allocate_compute, deploy_service
-from utils.state import create_task, update_task, add_step
+from utils.state import create_task, update_task, add_step, get_task, append_history
 from utils.rollback import RollbackEngine, estimate_cost_before_execution
 from utils.resource_registry import claim_service_name, find_free_port, release_all_for_task
 from utils.queue_manager import is_cancelled, clear_cancellation, check_timeout
@@ -34,8 +34,14 @@ TOOL_MAP = {
     "deploy_service":   deploy_service,
 }
 
+_RUNNING_TASKS: set[str] = set()
+
 
 async def run_task(ticket_text: str, task_id: str, broadcast: Callable):
+    if task_id in _RUNNING_TASKS:
+        return
+    _RUNNING_TASKS.add(task_id)
+
     start = time.time()
     rollback_engine = None
     tracer = TaskTracer(task_id)
@@ -45,9 +51,13 @@ async def run_task(ticket_text: str, task_id: str, broadcast: Callable):
     async def notify(msg: str, level: str = "info"):
         await broadcast(task_id, msg, level)
 
-    await on_task_start(task_id)
-
     try:
+        current_task = await get_task(task_id)
+        if current_task and current_task.get("status") in {"completed", "failed", "cancelled"}:
+            return
+
+        await on_task_start(task_id)
+
         # Phase 1: Planning
         await update_task(task_id, {"status": "planning"})
         await notify("🧠 Master Agent parsing ticket...", "planning")
@@ -197,10 +207,39 @@ async def run_task(ticket_text: str, task_id: str, broadcast: Callable):
         report = _build_report(plan, outputs, duration_ms)
         report["infra_genome"] = genome["bundle"]
         report["infra_genome_match"] = genome["match"]
+        final_mode = report.get("mode", "mock")
+        cleanup_after_seconds = 300 if final_mode == "real" and report.get("deploy_mode") == "demo" else None
+        cleanup_at = None
+        if cleanup_after_seconds and report.get("instance_id"):
+            cleanup_at = (datetime.utcnow() + timedelta(seconds=cleanup_after_seconds)).isoformat()
+            print(f"⏱ AUTO CLEANUP WINDOW: {cleanup_after_seconds}s")
+            print(f"⏱ AUTO CLEANUP AT: {cleanup_at}")
         await update_task(task_id, {
             "status": "completed", "final_report": report, "total_duration_ms": duration_ms,
             "infra_genome": genome["bundle"],
             "infra_genome_match": genome["match"],
+            "instance_id": report.get("instance_id"),
+            "elastic_ip": report.get("elastic_ip"),
+            "public_url": report.get("public_url"),
+            "mode": final_mode,
+            "cleanup_at": cleanup_at,
+        })
+        print("✅ TASK COMPLETED")
+        print("✅ S3 STATUS:", "created" if any(r.get("type") == "S3 Bucket" for r in report.get("resources", [])) else "none")
+        print("✅ EC2 STATUS:", report.get("instance_id") or "none")
+        print("✅ PUBLIC URL:", report.get("public_url") or "none")
+        task_snapshot = await get_task(task_id) or {}
+        await append_history({
+            "service": report.get("service_name") or plan.get("service_name", "service"),
+            "url": report.get("public_url"),
+            "instance_id": report.get("instance_id"),
+            "bucket_name": report.get("bucket_name"),
+            "timestamp": datetime.utcnow().isoformat(),
+            "expires_at": cleanup_at,
+            "task_id": task_id,
+            "status": "completed",
+            "mode": final_mode,
+            "user_id": task_snapshot.get("user_id"),
         })
         await notify(f"🧬 InfraGenome captured: {genome['bundle']['genome_id']} ({round(genome['match']['similarity'] * 100)}% match)", "info")
         await notify(f"🎉 All done! {service_name} is live in {duration_ms}ms", "success")
@@ -217,6 +256,8 @@ async def run_task(ticket_text: str, task_id: str, broadcast: Callable):
         await on_task_failed(task_id)
         await tracer.flush()
         raise
+    finally:
+        _RUNNING_TASKS.discard(task_id)
 
 
 async def _execute_step(step, outputs, task_id, notify, rollback_engine, tracer):
@@ -235,7 +276,7 @@ async def _execute_step(step, outputs, task_id, notify, rollback_engine, tracer)
     for dep in step.get("depends_on", []):
         dep_out = outputs.get(dep, {})
         context.update({k: v for k, v in dep_out.items()
-            if k in ("instance_id", "bucket_arn", "public_ip", "bucket_name")})
+            if k in ("instance_id", "bucket_arn", "public_ip", "public_url", "bucket_name")})
 
     tool_fn = TOOL_MAP[tool_name]
     raw = await tool_fn(params, context) if tool_name == "deploy_service" else await tool_fn(params)
@@ -333,17 +374,27 @@ def _base(step):
 
 def _build_report(plan, outputs, duration_ms):
     resources = []
+    instance_id = None
+    public_url = None
+    elastic_ip = None
+    mode = None
+    bucket_name = None
     for step_id, out in outputs.items():
         if out.get("status") == "success":
+            mode = out.get("mode") or mode
             t = out.get("tool", "")
             if t == "create_storage":
+                bucket_name = out.get("bucket_name") or bucket_name
                 resources.append({"type": "S3 Bucket", "name": out.get("bucket_name"),
                     "arn": out.get("bucket_arn"), "endpoint": out.get("endpoint")})
             elif t == "allocate_compute":
+                instance_id = out.get("instance_id") or instance_id
+                elastic_ip = out.get("elastic_ip") or out.get("public_ip") or elastic_ip
                 resources.append({"type": "EC2 Instance", "id": out.get("instance_id"),
                     "type_detail": out.get("instance_type"), "ip": out.get("public_ip"),
-                    "state": out.get("state")})
+                    "state": out.get("state"), "public_url": out.get("public_url")})
             elif t == "deploy_service":
+                public_url = out.get("public_url") or out.get("endpoint") or public_url
                 resources.append({"type": "Service", "name": out.get("service_name"),
                     "endpoint": out.get("endpoint"), "health": out.get("health_check"),
                     "container_id": out.get("container_id")})
@@ -353,6 +404,12 @@ def _build_report(plan, outputs, duration_ms):
         "total_steps": len(outputs),
         "total_retries": sum(o.get("retries", 0) for o in outputs.values()),
         "completed_at": datetime.utcnow().isoformat(),
+        "instance_id": instance_id,
+        "elastic_ip": elastic_ip,
+        "bucket_name": bucket_name,
+        "public_url": public_url,
+        "mode": mode or "mock",
+        "deploy_mode": next((o.get("deploy_mode") for o in outputs.values() if isinstance(o, dict) and o.get("deploy_mode")), None),
     }
 
 

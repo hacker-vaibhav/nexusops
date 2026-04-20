@@ -195,8 +195,8 @@ export function LogStream({ logs, height = 320 }) {
             RETRY EVENTS
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-            {retryLogs.map(l => (
-              <div key={l.id} style={{ display:'flex', gap:10, color:C.amber }}>
+            {retryLogs.map((l, index) => (
+              <div key={`${l.ts || 'retry'}-${index}`} style={{ display:'flex', gap:10, color:C.amber }}>
                 <span style={{ color:'var(--text-muted)', flexShrink:0, opacity:0.55 }}>
                   {fmtTime(l.ts)}
                 </span>
@@ -216,8 +216,8 @@ export function LogStream({ logs, height = 320 }) {
         {streamLogs.length === 0 ? (
           <span style={{ color:'var(--text-muted)' }}>Waiting for events...</span>
         ) : (
-          streamLogs.map(l => (
-            <div key={l.id} className="anim-slideRight"
+          streamLogs.map((l, index) => (
+            <div key={`${l.ts || 'log'}-${index}`} className="anim-slideRight"
               style={{ display:'flex', gap:10, color: levelColor(l.level) }}>
               <span style={{ color:'var(--text-muted)', flexShrink:0, opacity:0.45 }}>
                 {fmtTime(l.ts)}

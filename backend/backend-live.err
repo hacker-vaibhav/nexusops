@@ -1,0 +1,51 @@
+INFO:     Will watch for changes in these directories: ['D:\\Innovitus\\nexusup\\Nexus-ops_Auto\\backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [2824] using WatchFiles
+INFO:     Started server process [20608]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     ('127.0.0.1', 52920) - "WebSocket /ws/TK-7816A7D2?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 52998) - "WebSocket /ws/TK-7816A7D2?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 53582) - "WebSocket /ws/TK-E2A90A83?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 53695) - "WebSocket /ws/TK-E2A90A83?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 55889) - "WebSocket /ws/TK-87DA59D4?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 55959) - "WebSocket /ws/TK-87DA59D4?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 55985) - "WebSocket /ws/TK-E2D84952?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     ('127.0.0.1', 56010) - "WebSocket /ws/TK-830C569B?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     connection closed
+INFO:     ('127.0.0.1', 56084) - "WebSocket /ws/TK-830C569B?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 56840) - "WebSocket /ws/TK-94704FF6?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     ('127.0.0.1', 56926) - "WebSocket /ws/TK-94704FF6?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     ('127.0.0.1', 57700) - "WebSocket /ws/TK-776C8C03?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     connection closed
+INFO:     ('127.0.0.1', 57773) - "WebSocket /ws/TK-776C8C03?key=demo-9b752da8" [accepted]
+INFO:     connection open
+WARNING:  WatchFiles detected changes in 'tools\cloud_tools.py'. Reloading...
+INFO:     ('127.0.0.1', 63122) - "WebSocket /ws/TK-973FCBC2?key=demo-9b752da8" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     Shutting down
+INFO:     connection closed
+INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)

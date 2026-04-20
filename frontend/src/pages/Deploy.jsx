@@ -314,7 +314,7 @@ function ExecutionPanel({ task, logs, deployError }) {
   )
 }
 
-export default function Deploy({ tasks, activeTask, activeLogs, deploying, deployingTargetId, onDeploy, deployError }) {
+export default function Deploy({ tasks, activeTask, activeLogs, deploying, deployingTargetId, onDeploy, deployError, systemMode }) {
   const [customTicket, setCustomTicket] = useState('')
   const [priority, setPriority] = useState(3)
   const { result: valResult, checking: valChecking, validateNow } = useValidation(customTicket)
@@ -351,6 +351,23 @@ export default function Deploy({ tasks, activeTask, activeLogs, deploying, deplo
 
   return (
     <Page>
+      {systemMode !== 'real' && (
+        <div className="panel" style={{
+          marginBottom:18,
+          borderColor:'rgba(255,190,70,0.25)',
+          background:'linear-gradient(135deg, rgba(255,190,70,0.10), rgba(0,0,0,0.18))',
+        }}>
+          <div style={{ fontFamily:'var(--font-display)', fontWeight:800, color:C.amber, marginBottom:4 }}>
+            {systemMode === 'offline' ? 'OFFLINE' : 'ONLINE / MOCK MODE ACTIVE'}
+          </div>
+          <div style={{ fontSize:12, color:'var(--text-secondary)' }}>
+            {systemMode === 'offline'
+              ? 'The backend is not reachable right now.'
+              : 'The backend is online, but the AI provider keys are missing or AWS is not in real mode, so deployments stay in mock mode and will not attempt real cloud changes.'}
+          </div>
+        </div>
+      )}
+
       <CostPreviewModal
         open={costModal.open}
         data={costModal.data}

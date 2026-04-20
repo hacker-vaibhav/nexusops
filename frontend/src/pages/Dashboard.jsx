@@ -1,6 +1,6 @@
 // pages/Dashboard.jsx
 import { StatCard, SectionHeader, HealthDot, Sparkline, StatusBadge, EmptyState, Page } from '../components/UI'
-import { estimateCost, getEndpoint, getCatalogItem, msToS, timeAgo, STATUS_COLOR } from '../shared/store'
+import { estimateCost, getEndpoint, getCatalogItem, getInstanceId, msToS, timeAgo, STATUS_COLOR } from '../shared/store'
 
 const C = { teal:'#00c8e8', green:'#00e676', amber:'#ffab40', red:'#ff5252', purple:'#b388ff' }
 
@@ -139,7 +139,79 @@ function RecentActivity({ tasks }) {
   )
 }
 
-export default function Dashboard({ tasks, onViewLogs, onTest, onNavigate }) {
+function LatestDeployments({ tasks, onNavigate }) {
+  const latest = [...tasks]
+    .filter(t => t.status === 'completed')
+    .sort((a, b) => new Date(b.created_at || b.final_report?.completed_at || 0) - new Date(a.created_at || a.final_report?.completed_at || 0))
+    .slice(0, 5)
+
+  if (!latest.length) {
+    return (
+      <EmptyState
+        icon="⎈"
+        title="No successful deployments yet"
+        body="Completed services will appear here with their real AWS URL and instance id."
+      />
+    )
+  }
+
+  return (
+    <div style={{ display:'grid', gap:8 }}>
+      {latest.map(task => {
+        const url = getEndpoint(task)
+        const instanceId = getInstanceId(task)
+        const svc = task.final_report?.service_name || getCatalogItem(task)?.name || task.task_id
+        return (
+          <a
+            key={task.task_id}
+            href={url || '#'}
+            target="_blank"
+            rel="noreferrer"
+            className="panel-card"
+            style={{
+              display:'grid',
+              gridTemplateColumns:'1.1fr 1.4fr 1fr auto',
+              gap:12,
+              alignItems:'center',
+              textDecoration:'none',
+              padding:'14px 16px',
+            }}
+          >
+            <div>
+              <div style={{ fontFamily:'var(--font-display)', fontWeight:800, color:'var(--text-primary)' }}>
+                {svc}
+              </div>
+              <div style={{ fontFamily:'var(--font-mono)', fontSize:10, color:'var(--text-muted)' }}>
+                {task.final_report?.environment || 'unknown'}
+              </div>
+            </div>
+            <div style={{ minWidth:0 }}>
+              <div style={{ fontFamily:'var(--font-mono)', fontSize:10, color:'var(--text-muted)', letterSpacing:'0.12em', textTransform:'uppercase' }}>
+                Public URL
+              </div>
+              <div style={{ fontFamily:'var(--font-mono)', fontSize:12, color:C.teal, wordBreak:'break-all' }}>
+                {url || 'n/a'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontFamily:'var(--font-mono)', fontSize:10, color:'var(--text-muted)', letterSpacing:'0.12em', textTransform:'uppercase' }}>
+                Instance ID
+              </div>
+              <div style={{ fontFamily:'var(--font-mono)', fontSize:12, color:C.green }}>
+                {instanceId || 'n/a'}
+              </div>
+            </div>
+            <div style={{ fontFamily:'var(--font-mono)', fontSize:10, color:'var(--text-muted)' }}>
+              {timeAgo(task.final_report?.completed_at || task.created_at)}
+            </div>
+          </a>
+        )
+      })}
+    </div>
+  )
+}
+
+export default function Dashboard({ tasks, onViewLogs, onTest, onNavigate, systemMode }) {
   const live    = tasks.filter(t => t.status === 'completed')
   const running = tasks.filter(t => ['planning','executing','running','pending'].includes(t.status))
   const failed  = tasks.filter(t => t.status === 'failed')
@@ -149,6 +221,23 @@ export default function Dashboard({ tasks, onViewLogs, onTest, onNavigate }) {
 
   return (
     <Page>
+      {systemMode !== 'real' && (
+        <div className="panel" style={{
+          marginBottom:18,
+          borderColor:'rgba(255,190,70,0.25)',
+          background:'linear-gradient(135deg, rgba(255,190,70,0.10), rgba(0,0,0,0.18))',
+        }}>
+          <div style={{ fontFamily:'var(--font-display)', fontWeight:800, color:C.amber, marginBottom:4 }}>
+            {systemMode === 'offline' ? 'OFFLINE' : 'ONLINE / MOCK MODE'}
+          </div>
+          <div style={{ fontSize:12, color:'var(--text-secondary)' }}>
+            {systemMode === 'offline'
+              ? 'The backend is not reachable right now.'
+              : 'The backend is online, but AI provider keys are missing or AWS is not in real mode, so the dashboard is showing the safe mock view.'}
+          </div>
+        </div>
+      )}
+
       {/* Stats row */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14, marginBottom:28 }}>
         <StatCard icon="✅" label="SERVICES LIVE"      value={live.length}        color={C.green}  delay={0} />
@@ -215,6 +304,11 @@ export default function Dashboard({ tasks, onViewLogs, onTest, onNavigate }) {
           </div>
         </div>
       )}
+
+      <div style={{ marginBottom:28 }}>
+        <SectionHeader title="LATEST DEPLOYMENTS" color={C.purple} count={tasks.filter(t => t.status === 'completed').length} />
+        <LatestDeployments tasks={tasks} onNavigate={onNavigate} />
+      </div>
 
       {/* Recent activity */}
       <RecentActivity tasks={tasks}/>

@@ -2,7 +2,7 @@
 // Central shared state — imported by all pages so they share live data
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { fetchTasks, fetchTask, submitTicket, connectToTask } from '../utils/api'
+import { fetchTasks, fetchTask, submitTicket, connectToTask, fetchHealth, fetchAwsStatus, fetchConfig } from '../utils/api'
 
 // AWS pricing per hour
 export const PRICING = {
@@ -37,7 +37,15 @@ export function estimateCost(task) {
 }
 
 export function getEndpoint(task) {
-  return task?.steps?.find(s => s.tool === 'deploy_service')?.output?.endpoint || null
+  return task?.final_report?.public_url
+    || task?.final_report?.endpoint
+    || task?.public_url
+    || task?.steps?.find(s => s.tool === 'deploy_service')?.output?.endpoint
+    || null
+}
+
+export function getInstanceId(task) {
+  return task?.final_report?.instance_id || task?.instance_id || task?.steps?.find(s => s.tool === 'allocate_compute')?.output?.instance_id || null
 }
 
 export function getCatalogItem(task) {
@@ -72,19 +80,76 @@ export function useTaskStore() {
   const [activeLogs, setActiveLogs]   = useState([])
   const [deploying, setDeploying]     = useState(false)
   const [deployingTargetId, setDeployingTargetId] = useState(null)
+  const [backendHealthy, setBackendHealthy] = useState(false)
+  const [appConfig, setAppConfig] = useState(null)
+  const [awsStatus, setAwsStatus] = useState(null)
   const wsRef = useRef(null)
 
   // Poll all tasks
   useEffect(() => {
     const load = () => fetchTasks().then(t => setTasks(t || [])).catch(() => {})
     load()
-    const iv = setInterval(load, 4000)
+    const iv = setInterval(load, 6000)
     return () => clearInterval(iv)
   }, [])
+
+  useEffect(() => {
+    let mounted = true
+    const loadHealth = async () => {
+      const healthy = await fetchHealth()
+      if (mounted) setBackendHealthy(healthy)
+    }
+    loadHealth()
+    const iv = setInterval(loadHealth, 15000)
+    return () => {
+      mounted = false
+      clearInterval(iv)
+    }
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+    const loadAws = async () => {
+      if (!backendHealthy) {
+        if (mounted) setAwsStatus(null)
+        return
+      }
+      const status = await fetchAwsStatus()
+      if (mounted) setAwsStatus(status)
+    }
+    loadAws()
+    const iv = setInterval(loadAws, 20000)
+    return () => {
+      mounted = false
+      clearInterval(iv)
+    }
+  }, [backendHealthy])
+
+  useEffect(() => {
+    let mounted = true
+    const loadConfig = async () => {
+      const config = await fetchConfig()
+      if (mounted) setAppConfig(config)
+    }
+    loadConfig()
+    const iv = setInterval(loadConfig, 30000)
+    return () => {
+      mounted = false
+      clearInterval(iv)
+    }
+  }, [])
+
+  const runtimeMode = appConfig?.runtime_mode || appConfig?.execution_mode || awsStatus?.execution_mode
+  const systemMode = !backendHealthy
+    ? 'offline'
+    : runtimeMode === 'real'
+      ? 'real'
+      : 'mock'
 
   // Connect WebSocket when active task changes
   useEffect(() => {
     if (!activeTaskId) return
+    if (!backendHealthy) return
     if (wsRef.current) wsRef.current.close()
     setActiveLogs([])
 
@@ -113,7 +178,7 @@ export function useTaskStore() {
 
     wsRef.current = ws
     return () => { ws.close(); wsRef.current = null }
-  }, [activeTaskId])
+  }, [activeTaskId, backendHealthy])
 
   const deploy = useCallback(async (ticketText, priority = 3, targetId = null) => {
     setDeploying(true)
@@ -141,5 +206,9 @@ export function useTaskStore() {
     deploying,
     deployingTargetId,
     deploy,
+    backendHealthy,
+    appConfig,
+    awsStatus,
+    systemMode,
   }
 }

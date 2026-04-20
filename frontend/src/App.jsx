@@ -6,6 +6,7 @@ import {
   Eye,
   Gauge,
   Hexagon,
+  Clock3,
   Settings2,
   Sparkles,
   Zap,
@@ -16,6 +17,7 @@ import Dashboard from './pages/Dashboard'
 import Deploy from './pages/Deploy'
 import Monitor from './pages/Monitor'
 import Costs from './pages/Costs'
+import History from './pages/History'
 import Settings from './pages/Settings'
 
 const C = { teal:'#00d9ff', green:'#00f38d', amber:'#ffbe46', red:'#ff4d6d' }
@@ -123,14 +125,13 @@ const PAGES = [
   { id:'dashboard', label:'Dashboard', icon:Blocks },
   { id:'deploy', label:'Deploy', icon:Zap },
   { id:'monitor', label:'Monitor', icon:Gauge },
+  { id:'history', label:'History', icon:Clock3 },
   { id:'costs', label:'Cost & Resources', icon:Sparkles },
   { id:'settings', label:'Settings & Docs', icon:Settings2 },
 ]
 
-function NavBar({ page, onNavigate, tasks }) {
-  const live = tasks.filter(t => t.status === 'completed').length
-  const running = tasks.filter(t => ['planning', 'executing', 'running', 'pending'].includes(t.status)).length
-  const online = running > 0 || live > 0
+function NavBar({ page, onNavigate, tasks, backendHealthy, systemMode }) {
+  const online = backendHealthy
   const navRef = useRef(null)
   const glowRef = useRef(null)
   const focusRef = useRef(null)
@@ -268,6 +269,7 @@ function NavBar({ page, onNavigate, tasks }) {
           <CircleDot size={10} strokeWidth={2} />
           <span>{online ? 'online' : 'offline'}</span>
         </div>
+        <span className="nav-version">{systemMode === 'real' ? 'REAL AWS' : systemMode === 'mock' ? 'ONLINE / MOCK' : 'OFFLINE'}</span>
         <span className="nav-version">v1.0</span>
         <span className="nav-version">Track 2</span>
       </div>
@@ -303,11 +305,11 @@ export default function App() {
         </div>
       </div>
 
-      <NavBar page={page} onNavigate={setPage} tasks={store.tasks} />
+      <NavBar page={page} onNavigate={setPage} tasks={store.tasks} backendHealthy={store.backendHealthy} systemMode={store.systemMode} />
 
       <div className="app-shell-layer" key={page} style={{ flex:1, minHeight:0, overflowY:'auto', animation:'pageSlideIn 0.34s cubic-bezier(0.16,1,0.3,1) both' }}>
         {page === 'dashboard' && (
-          <Dashboard tasks={store.tasks} onViewLogs={handleViewLogs} onTest={handleTest} onNavigate={setPage} />
+          <Dashboard tasks={store.tasks} onViewLogs={handleViewLogs} onTest={handleTest} onNavigate={setPage} systemMode={store.systemMode} />
         )}
         {page === 'deploy' && (
           <Deploy
@@ -317,6 +319,7 @@ export default function App() {
             deploying={store.deploying}
             deployingTargetId={store.deployingTargetId}
             deployError={deployError}
+            systemMode={store.systemMode}
             onDeploy={async (ticket, priority = 3, targetId = null) => {
               setDeployError(null)
               try {
@@ -333,6 +336,7 @@ export default function App() {
         )}
         {page === 'monitor' && <Monitor tasks={store.tasks} />}
         {page === 'costs' && <Costs tasks={store.tasks} />}
+        {page === 'history' && <History />}
         {page === 'settings' && <Settings tasks={store.tasks} />}
       </div>
 

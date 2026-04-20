@@ -13,7 +13,7 @@ import asyncio
 import os
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
-from utils.state import create_task, get_task, list_tasks, update_task
+from utils.state import create_task, get_task, list_tasks, update_task, list_history
 from utils.validator import validate_ticket
 from utils.auth import require_user, get_user_tasks
 from utils.queue_manager import enqueue_task, request_cancellation, queue_length, queue_position
@@ -59,57 +59,91 @@ async def submit_ticket(
 
     ticket_text = body.ticket.strip()
 
-    # Step 1: Input validation
-    validation = validate_ticket(ticket_text)
-    if not validation.valid:
-        raise HTTPException(status_code=422, detail={
-            "error": "invalid_ticket",
-            "reason": validation.rejection_reason,
-            "suggestion": validation.suggestion,
+    try:
+        # Step 1: Input validation
+        validation = validate_ticket(ticket_text)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail={
+                "error": "invalid_ticket",
+                "reason": validation.rejection_reason,
+                "suggestion": validation.suggestion,
+            })
+
+        # Step 2: Concurrency limit
+        if _running_count >= MAX_CONCURRENT:
+            raise HTTPException(status_code=429, detail={
+                "error": "too_many_tasks",
+                "reason": f"Maximum {MAX_CONCURRENT} concurrent tasks. Please wait.",
+            })
+
+        # Step 3: Budget guard (per user)
+        user_tasks = await get_user_tasks(user["user_id"], user.get("is_admin", False))
+        live_count = sum(1 for t in user_tasks if t.get("status") == "completed")
+        if live_count >= MAX_INSTANCES:
+            raise HTTPException(status_code=402, detail={
+                "error": "budget_limit",
+                "reason": f"Maximum {MAX_INSTANCES} live services reached.",
+            })
+
+        # Step 4: Create task with user_id
+        task = await create_task(ticket_text)
+        task_id = task["task_id"]
+        await update_task(task_id, {"user_id": user["user_id"], "priority": body.priority})
+
+        _running_count += 1
+
+        # Enqueue with priority
+        await enqueue_task(task_id, priority=body.priority)
+        pos = await queue_position(task_id)
+
+        background.add_task(_run_with_cleanup, task_id, ticket_text)
+
+        return TicketResponse(
+            task_id=task_id,
+            status="accepted",
+            message=f"Task {task_id} queued. Connect to /ws/{task_id} for live updates.",
+            warning=validation.suggestion or None,
+            priority=body.priority,
+            queue_position=pos,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={
+            "error": "submit_failed",
+            "reason": "The deployment request could not be accepted right now.",
+            "suggestion": "Check Redis, backend logs, and AWS connectivity, then try again.",
+            "debug": str(exc),
         })
-
-    # Step 2: Concurrency limit
-    if _running_count >= MAX_CONCURRENT:
-        raise HTTPException(status_code=429, detail={
-            "error": "too_many_tasks",
-            "reason": f"Maximum {MAX_CONCURRENT} concurrent tasks. Please wait.",
-        })
-
-    # Step 3: Budget guard (per user)
-    user_tasks = await get_user_tasks(user["user_id"], user.get("is_admin", False))
-    live_count = sum(1 for t in user_tasks if t.get("status") == "completed")
-    if live_count >= MAX_INSTANCES:
-        raise HTTPException(status_code=402, detail={
-            "error": "budget_limit",
-            "reason": f"Maximum {MAX_INSTANCES} live services reached.",
-        })
-
-    # Step 4: Create task with user_id
-    task = await create_task(ticket_text)
-    task_id = task["task_id"]
-    await update_task(task_id, {"user_id": user["user_id"], "priority": body.priority})
-
-    _running_count += 1
-
-    # Enqueue with priority
-    await enqueue_task(task_id, priority=body.priority)
-    pos = await queue_position(task_id)
-
-    background.add_task(_run_with_cleanup, task_id, ticket_text)
-
-    return TicketResponse(
-        task_id=task_id,
-        status="accepted",
-        message=f"Task {task_id} queued. Connect to /ws/{task_id} for live updates.",
-        warning=validation.suggestion or None,
-        priority=body.priority,
-        queue_position=pos,
-    )
 
 
 @router.get("/tickets")
 async def get_tickets(user: dict = Depends(require_user)):
-    return await get_user_tasks(user["user_id"], user.get("is_admin", False))
+    print("API HIT: /api/tickets")
+    try:
+        tasks = await get_user_tasks(user["user_id"], user.get("is_admin", False))
+        return tasks or []
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={
+            "error": "task_list_unavailable",
+            "reason": "Task list is temporarily unavailable.",
+            "suggestion": "Refresh after Redis/backend recovery.",
+            "debug": str(exc),
+        })
+
+
+@router.get("/history")
+async def get_history(user: dict = Depends(require_user)):
+    try:
+        history = await list_history(limit=20, user_id=user["user_id"], is_admin=user.get("is_admin", False))
+        return history or []
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={
+            "error": "history_unavailable",
+            "reason": "Deployment history is temporarily unavailable.",
+            "suggestion": "Refresh after Redis/backend recovery.",
+            "debug": str(exc),
+        })
 
 
 @router.get("/tickets/{task_id}")
@@ -160,26 +194,45 @@ async def validate_endpoint(ticket: str):
 
 @router.post("/tickets/preview-cost")
 async def preview_cost(body: TicketRequest, user: dict = Depends(require_user)):
-    ticket_text = body.ticket.strip()
-    validation = validate_ticket(ticket_text)
-    if not validation.valid:
-        raise HTTPException(status_code=422, detail={
-            "error": "invalid_ticket",
-            "reason": validation.rejection_reason,
-            "suggestion": validation.suggestion,
-        })
-    from agents.master_agent import plan as master_plan
-    from utils.rollback import estimate_cost_before_execution
-    plan_data = await master_plan(ticket_text)
-    cost      = estimate_cost_before_execution(plan_data)
-    return {
-        "task_preview": {
-            "service_name": plan_data.get("service_name"),
-            "environment":  plan_data.get("environment"),
-            "steps":        len(plan_data.get("steps", [])),
-        },
-        "cost_estimate": cost,
-    }
+    try:
+        ticket_text = body.ticket.strip()
+        validation = validate_ticket(ticket_text)
+        if not validation.valid:
+            raise HTTPException(status_code=422, detail={
+                "error": "invalid_ticket",
+                "reason": validation.rejection_reason,
+                "suggestion": validation.suggestion,
+            })
+        from agents.master_agent import plan as master_plan
+        from utils.rollback import estimate_cost_before_execution
+        plan_data = await master_plan(ticket_text) or {}
+        cost = estimate_cost_before_execution(plan_data)
+        return {
+            "task_preview": {
+                "service_name": plan_data.get("service_name", "unknown"),
+                "environment":  plan_data.get("environment", "unknown"),
+                "steps":        len(plan_data.get("steps", [])),
+            },
+            "cost_estimate": cost,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        return {
+            "task_preview": {
+                "service_name": "unknown",
+                "environment": "unknown",
+                "steps": 0,
+            },
+            "cost_estimate": {
+                "breakdown": [],
+                "total_monthly": 0.0,
+                "total_hourly": 0.0,
+                "currency": "USD",
+                "note": "Cost preview unavailable right now. The request can still be submitted.",
+            },
+            "warning": str(exc),
+        }
 
 
 @router.get("/metrics")

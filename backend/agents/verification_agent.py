@@ -13,6 +13,10 @@ import re
 from datetime import datetime
 from typing import Callable
 
+import httpx
+
+from tools.cloud_tools import auto_stop, schedule_auto_termination, schedule_auto_cleanup
+
 MAX_RETRIES = 3
 BASE_BACKOFF = 1.5   # seconds — doubles each retry: 1.5, 3.0, 6.0
 
@@ -21,9 +25,52 @@ async def verify(step: dict, execution_output: dict, retry_fn: Callable, on_upda
     tool     = step["tool"]
     step_id  = step["step_id"]
 
-    print(f"🔍 Verifying step {step_id}")
+    print(f"Verifying step {step_id}")
 
     if execution_output.get("status") == "success":
+        if tool == "deploy_service" and execution_output.get("mode") == "real":
+            public_url = execution_output.get("public_url") or execution_output.get("endpoint")
+            health_url = _health_url(public_url)
+            if not public_url or not health_url:
+                last_error = "Public URL missing from deployment output"
+                await on_update(
+                    f"⚠️ Step {step_id} deployed but health check failed: {last_error}. Starting self-heal...",
+                    "retrying"
+                )
+                execution_output = {
+                    **execution_output,
+                    "status": "failed",
+                    "error": last_error,
+                }
+            elif not await _ping_public_url(health_url):
+                last_error = f"Service not reachable at {health_url}"
+                await on_update(
+                    f"⚠️ Step {step_id} deployed but health check failed: {last_error}. Starting self-heal...",
+                    "retrying"
+                )
+                execution_output = {
+                    **execution_output,
+                    "status": "failed",
+                    "error": last_error,
+                }
+            else:
+                deploy_mode = execution_output.get("deploy_mode", "demo")
+                instance_id = execution_output.get("instance_id")
+                if instance_id and deploy_mode == "budget":
+                    await auto_stop(instance_id)
+                elif instance_id and deploy_mode == "demo":
+                    bucket_name = execution_output.get("bucket_name")
+                    if bucket_name:
+                        schedule_auto_cleanup(instance_id, bucket_name=bucket_name, delay_seconds=300)
+                    else:
+                        schedule_auto_termination(instance_id, delay_seconds=300)
+                await on_update(f"✅ Step {step_id} ({tool}) verified successfully", "verified")
+                return {**execution_output, "verified": True, "retries": 0}
+        else:
+            await on_update(f"✅ Step {step_id} ({tool}) verified successfully", "verified")
+            return {**execution_output, "verified": True, "retries": 0}
+
+    if tool == "deploy_service" and execution_output.get("mode") == "mock":
         await on_update(f"✅ Step {step_id} ({tool}) verified successfully", "verified")
         return {**execution_output, "verified": True, "retries": 0}
 
@@ -31,7 +78,7 @@ async def verify(step: dict, execution_output: dict, retry_fn: Callable, on_upda
     await on_update(f"⚠️ Step {step_id} failed: {last_error}. Starting self-heal...", "retrying")
 
     for attempt in range(1, MAX_RETRIES + 1):
-        print(f"🔁 Retrying step {step_id} ({attempt}/{MAX_RETRIES})")
+        print(f"Retrying step {step_id} ({attempt}/{MAX_RETRIES})")
 
         # Exponential backoff: 1.5s, 3.0s, 6.0s
         backoff = BASE_BACKOFF * (2 ** (attempt - 1))
@@ -64,6 +111,24 @@ async def verify(step: dict, execution_output: dict, retry_fn: Callable, on_upda
         "verified": False,
         "retries": MAX_RETRIES
     }
+
+
+async def _ping_public_url(public_url: str) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            resp = await client.get(public_url)
+            return 200 <= resp.status_code < 300
+    except Exception:
+        return False
+
+
+def _health_url(public_url: str | None) -> str | None:
+    if not public_url:
+        return None
+    base = public_url.rstrip("/")
+    if base.endswith("/health"):
+        return base
+    return f"{base}/health"
 
 
 def _diagnose_and_patch(step: dict, error: str, attempt: int) -> dict:

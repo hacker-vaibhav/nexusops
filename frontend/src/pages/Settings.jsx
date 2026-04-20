@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { getCatalogItem, getEndpoint } from '../shared/store'
 import { SectionHeader, CopyBtn, Page } from '../components/UI'
-import { setApiKey, getApiKey, getApiBase, fetchGenomeRegistry, fetchGenomeMatch } from '../utils/api'
+import { setApiKey, getApiKey, getApiBase, fetchGenomeRegistry, fetchGenomeMatch, readJsonResponse } from '../utils/api'
 
 const C = { teal:'#00c8e8', green:'#00e676', amber:'#ffab40', red:'#ff5252', purple:'#b388ff' }
 const API = getApiBase()
@@ -212,7 +212,7 @@ function ApiTester({ method, path, defaultBody, description }) {
       const opts = { method, headers:{ 'Content-Type':'application/json' } }
       if (method === 'POST' && body) opts.body = body
       const res = await fetch(`${API}${path}`, opts)
-      const data = await res.json()
+      const data = await readJsonResponse(res)
       setResult({ status: res.status, ok: res.ok, data })
     } catch(e) {
       setResult({ status: 0, ok: false, data: { error: e.message } })
@@ -388,17 +388,19 @@ function SystemConfig() {
 
   useEffect(() => {
     fetch(`${API}/api/config`)
-      .then(r => r.json())
+      .then(readJsonResponse)
       .then(setConfig)
-      .catch(() => setConfig({}))
+      .catch(() => setConfig(null))
   }, [])
 
   const checks = [
-    { label:'LLM',            value:'Groq (free) → rule-based fallback', color:C.teal },
+    { label:'Service Status', value: config?.service_status || 'loading', color:C.green },
+    { label:'LLM',            value: config?.llm_enabled ? 'enabled' : 'missing -> rule-based fallback', color:C.teal },
     { label:'Model',          value:'llama-3.1-8b-instant (Groq free tier)', color:C.teal },
-    { label:'Cloud',          value:'LocalStack (AWS-compatible, local)', color:C.teal },
+    { label:'Cloud',          value: config?.runtime_mode === 'real' ? 'real AWS' : 'mock execution', color:C.teal },
     { label:'State',          value:'Redis 7 — pub/sub + task store', color:C.amber },
-    { label:'Execution Mode', value: config?.execution_mode || import.meta.env.VITE_EXECUTION_MODE || 'mock', color:C.green },
+    { label:'Execution Mode', value: config?.runtime_mode || config?.execution_mode || import.meta.env.VITE_EXECUTION_MODE || 'mock', color:C.green },
+    { label:'Requested Mode', value: config?.requested_execution_mode || import.meta.env.VITE_EXECUTION_MODE || 'local', color:C.amber },
     { label:'Max Instances',  value:'20 per deployment', color:C.amber },
     { label:'Max Concurrent', value:'10 parallel tasks', color:C.amber },
     { label:'Max Retries',    value:'3 per step (exponential backoff)', color:C.amber },

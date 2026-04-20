@@ -17,20 +17,32 @@ from datetime import datetime
 from typing import Callable
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
-MODE         = os.getenv("EXECUTION_MODE", "mock")
+from utils.runtime import get_effective_execution_mode
+
+MODE         = get_effective_execution_mode()
 AWS_ENDPOINT = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
 AWS_REGION   = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
+
+
+def _client(service_name: str):
+    kwargs = {
+        "region_name": AWS_REGION,
+        "aws_access_key_id": AWS_ACCESS_KEY_ID or "test",
+        "aws_secret_access_key": AWS_SECRET_ACCESS_KEY or "test",
+        "config": Config(ignore_configured_endpoint_urls=True) if MODE == "real" else Config(),
+    }
+    if MODE != "real":
+        kwargs["endpoint_url"] = AWS_ENDPOINT
+    return boto3.client(service_name, **kwargs)
 
 
 def _s3():
-    return boto3.client(
-        "s3", endpoint_url=AWS_ENDPOINT,
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
-        region_name=AWS_REGION,
-    )
+    return _client("s3")
 
 
 class RollbackEngine:
@@ -114,12 +126,7 @@ class RollbackEngine:
                 await self.notify(f"✓ S3 bucket {rid} deleted", "info")
 
             elif rtype == "ec2_instance":
-                ec2 = boto3.client(
-                    "ec2", endpoint_url=AWS_ENDPOINT,
-                    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-                    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
-                    region_name=AWS_REGION,
-                )
+                ec2 = _client("ec2")
                 ec2.terminate_instances(InstanceIds=[rid])
                 await self.notify(f"✓ EC2 instance {rid} terminated", "info")
 

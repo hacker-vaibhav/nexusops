@@ -17,6 +17,13 @@ import os
 _redis: Optional[aioredis.Redis] = None
 
 
+def _safe_json_loads(raw):
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
 class _MemoryRedis:
     """Small async Redis-like fallback for local development."""
 
@@ -169,11 +176,21 @@ async def init_redis():
         _redis = _MemoryRedis()
         return
 
-    client = aioredis.from_url(url, decode_responses=True)
+    client = aioredis.from_url(
+        url,
+        decode_responses=True,
+        socket_connect_timeout=1,
+        socket_timeout=1,
+        health_check_interval=30,
+    )
     try:
-        await client.ping()
+        await asyncio.wait_for(client.ping(), timeout=2)
         _redis = client
     except Exception:
+        try:
+            await client.close()
+        except Exception:
+            pass
         _redis = _MemoryRedis()
 
 
@@ -208,7 +225,7 @@ async def create_task(ticket_text: str) -> dict:
 async def get_task(task_id: str) -> Optional[dict]:
     r = await get_redis()
     raw = await r.get(f"task:{task_id}")
-    return json.loads(raw) if raw else None
+    return _safe_json_loads(raw) if raw else None
 
 
 async def update_task(task_id: str, updates: dict):
@@ -247,9 +264,34 @@ async def list_tasks() -> list:
     tasks = []
     for k in sorted(keys, reverse=True)[:20]:
         raw = await r.get(k)
-        if raw:
-            tasks.append(json.loads(raw))
+        item = _safe_json_loads(raw) if raw else None
+        if item:
+            tasks.append(item)
     return tasks
+
+
+async def append_history(entry: dict):
+    """Persist a deployment history entry for the UI."""
+    r = await get_redis()
+    payload = json.dumps(entry)
+    if hasattr(r, "lpush"):
+        await r.lpush("history", payload)
+        await r.ltrim("history", 0, 19)
+
+
+async def list_history(limit: int = 20, user_id: str | None = None, is_admin: bool = False) -> list[dict]:
+    """Return the most recent deployment history entries."""
+    r = await get_redis()
+    raw = await r.lrange("history", 0, -1)
+    items = []
+    for item in raw:
+        parsed = _safe_json_loads(item)
+        if not parsed:
+            continue
+        if not is_admin and user_id and parsed.get("user_id") not in {None, user_id}:
+            continue
+        items.append(parsed)
+    return items[:limit]
 
 
 async def append_log(task_id: str, message: str, level: str):
