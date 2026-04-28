@@ -21,7 +21,6 @@ import History from './pages/History'
 import Settings from './pages/Settings'
 
 const C = { teal:'#00d9ff', green:'#00f38d', amber:'#ffbe46', red:'#ff4d6d' }
-const SPLINE_EMBED_URL = 'https://my.spline.design/orbitalbluestar-AsuVxbYimbXfFDZW35aHVYXi/'
 
 function TestModal({ open, task, endpoint, onClose }) {
   const [result, setResult] = useState(null)
@@ -193,17 +192,6 @@ export default function App() {
 
   return (
     <div className="grid-bg" style={{ height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
-      <div className="app-spline-backdrop" aria-hidden="true">
-        <div className="app-spline-orb">
-          <iframe
-            src={SPLINE_EMBED_URL}
-            title="NEXUS OPS orbital background"
-            loading="lazy"
-            allow="autoplay; fullscreen"
-          />
-        </div>
-      </div>
-
       <NavBar page={page} onNavigate={setPage} backendHealthy={store.backendHealthy} systemMode={store.systemMode} />
 
       <div className="app-shell-layer" key={page} style={{ flex:1, minHeight:0, overflowY:'auto', animation:'pageSlideIn 0.34s cubic-bezier(0.16,1,0.3,1) both' }}>

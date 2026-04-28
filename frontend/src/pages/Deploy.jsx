@@ -14,8 +14,6 @@ const C = {
   blue:'#57b6ff',
 }
 
-const SPLINE_EMBED_URL = 'https://my.spline.design/orbitalbluestar-AsuVxbYimbXfFDZW35aHVYXi/'
-
 const ENV_STYLES = {
   production: { label:'PRODUCTION', color:C.green },
   staging: { label:'STAGING', color:C.amber },
@@ -471,14 +469,6 @@ export default function Deploy({ tasks, activeTask, activeLogs, deploying, deplo
             ) : null}
           />
           <div className="panel execution-shell">
-            <div className="spline-backdrop" aria-hidden="true">
-              <iframe
-                src={SPLINE_EMBED_URL}
-                title="NEXUS OPS 3D background"
-                loading="lazy"
-                allow="autoplay; fullscreen"
-              />
-            </div>
             <ExecutionPanel task={activeTask} logs={activeLogs} deployError={deployError} />
           </div>
         </div>
