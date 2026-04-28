@@ -30,7 +30,11 @@ const PROXY_TARGET = process.env.VITE_PROXY_TARGET || process.env.VITE_API_URL |
 const WS_TARGET = PROXY_TARGET.replace(/^http/, 'ws')
 
 export default defineConfig({
+  base: '/',
   plugins: [react()],
+  build: {
+    outDir: 'dist',
+  },
   server: {
     host: '0.0.0.0',
     port: 3000,
