@@ -1,4 +1,4 @@
-const API = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+const API = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 const PROXY_TARGET = (import.meta.env.VITE_PROXY_TARGET || '').replace(/\/$/, '')
 
 function toWsUrl(base) {
@@ -32,7 +32,7 @@ export function setApiKey(key) {
 export function getApiKey() { return _apiKey }
 
 export function getApiBase() {
-  return API
+  return API || window.location.origin
 }
 
 export function getWsBase() {

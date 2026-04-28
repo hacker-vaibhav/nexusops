@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import {
   Activity,
   Blocks,
@@ -130,108 +130,11 @@ const PAGES = [
   { id:'settings', label:'Settings & Docs', icon:Settings2 },
 ]
 
-function NavBar({ page, onNavigate, tasks, backendHealthy, systemMode }) {
+function NavBar({ page, onNavigate, backendHealthy, systemMode }) {
   const online = backendHealthy
-  const navRef = useRef(null)
-  const glowRef = useRef(null)
-  const focusRef = useRef(null)
-  const buttonRefs = useRef({})
-  const [hoveredId, setHoveredId] = useState(null)
-  const targetRef = useRef({ x: 0, y: 0, opacity: 0, scale: 1 })
-  const currentRef = useRef({ x: 0, y: 0, opacity: 0, scale: 1 })
-
-  const positionFocus = (id, active = false) => {
-    const focus = focusRef.current
-    const nav = navRef.current
-    const button = buttonRefs.current[id]
-    if (!focus || !nav || !button) return
-    const navRect = nav.getBoundingClientRect()
-    const rect = button.getBoundingClientRect()
-    const paddingX = 10
-    const paddingY = 6
-    focus.style.width = `${rect.width + paddingX * 2}px`
-    focus.style.height = `${rect.height + paddingY * 2}px`
-    focus.style.left = `${rect.left - navRect.left - paddingX}px`
-    focus.style.top = `${rect.top - navRect.top - paddingY}px`
-    focus.style.opacity = '1'
-    focus.style.transform = active ? 'scale(1)' : 'scale(1.04)'
-    focus.dataset.active = active ? 'true' : 'false'
-  }
-
-  useEffect(() => {
-    const activeId = page
-    positionFocus(activeId, true)
-  }, [page])
-
-  useEffect(() => {
-    let frame = null
-    const animateGlow = () => {
-      const glow = glowRef.current
-      if (glow) {
-        const cur = currentRef.current
-        const tgt = targetRef.current
-        const ease = 0.18
-        cur.x += (tgt.x - cur.x) * ease
-        cur.y += (tgt.y - cur.y) * ease
-        cur.opacity += (tgt.opacity - cur.opacity) * ease
-        cur.scale += (tgt.scale - cur.scale) * ease
-        glow.style.transform = `translate3d(${cur.x}px, ${cur.y}px, 0) scale(${cur.scale})`
-        glow.style.opacity = `${cur.opacity}`
-      }
-      frame = requestAnimationFrame(animateGlow)
-    }
-    frame = requestAnimationFrame(animateGlow)
-    return () => cancelAnimationFrame(frame)
-  }, [])
-
-  const moveGlow = (x, y, options = {}) => {
-    const glowSize = 180
-    targetRef.current = {
-      ...targetRef.current,
-      x: x - glowSize / 2,
-      y: y - glowSize / 2,
-      opacity: options.opacity ?? 0.32,
-      scale: options.scale ?? 1,
-    }
-  }
-
-  const handleMouseMove = (event) => {
-    const rect = navRef.current?.getBoundingClientRect()
-    if (!rect) return
-    moveGlow(event.clientX - rect.left, event.clientY - rect.top, { opacity: 0.28, scale: 0.98 })
-  }
-
-  const handleMouseLeave = () => {
-    targetRef.current.opacity = 0
-    setHoveredId(null)
-    positionFocus(page, true)
-  }
-
-  const handleLinkEnter = (id, event) => {
-    setHoveredId(id)
-    const button = event.currentTarget
-    const navRect = navRef.current?.getBoundingClientRect()
-    const rect = button.getBoundingClientRect()
-    if (!navRect) return
-    moveGlow(rect.left - navRect.left + rect.width / 2, rect.top - navRect.top + rect.height / 2, {
-      opacity: 0.75,
-      scale: 1.2,
-    })
-    positionFocus(id, false)
-  }
-
-  const handleLinkLeave = () => {
-    setHoveredId(null)
-    targetRef.current.opacity = 0.32
-    targetRef.current.scale = 1
-    positionFocus(page, true)
-  }
 
   return (
-    <nav className="top-nav" ref={navRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
-      <div className="nav-glow-shell" aria-hidden="true">
-        <div className="nav-glow-ball" ref={glowRef} />
-      </div>
+    <nav className="top-nav">
       <div className="brand-lockup">
         <div className="brand-mark">
           <Hexagon size={18} strokeWidth={1.7} />
@@ -244,18 +147,14 @@ function NavBar({ page, onNavigate, tasks, backendHealthy, systemMode }) {
       </div>
 
       <div className="top-nav-links">
-        <div className="nav-focus-ring" ref={focusRef} aria-hidden="true" />
         {PAGES.map(({ id, label, icon: Icon }) => {
           const isActive = page === id
           return (
             <button
               key={id}
               type="button"
-              ref={(el) => { if (el) buttonRefs.current[id] = el }}
               onClick={() => onNavigate(id)}
-              onMouseEnter={(event) => handleLinkEnter(id, event)}
-              onMouseLeave={handleLinkLeave}
-              className={`top-nav-link ${isActive ? 'is-active' : ''} ${hoveredId === id ? 'is-hovered' : ''}`}
+              className={`top-nav-link ${isActive ? 'is-active' : ''}`}
             >
               <Icon size={12} strokeWidth={1.8} />
               <span>{label}</span>
@@ -305,7 +204,7 @@ export default function App() {
         </div>
       </div>
 
-      <NavBar page={page} onNavigate={setPage} tasks={store.tasks} backendHealthy={store.backendHealthy} systemMode={store.systemMode} />
+      <NavBar page={page} onNavigate={setPage} backendHealthy={store.backendHealthy} systemMode={store.systemMode} />
 
       <div className="app-shell-layer" key={page} style={{ flex:1, minHeight:0, overflowY:'auto', animation:'pageSlideIn 0.34s cubic-bezier(0.16,1,0.3,1) both' }}>
         {page === 'dashboard' && (

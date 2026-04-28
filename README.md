@@ -47,7 +47,10 @@ User Ticket (Natural Language)
 
 ### Prerequisites
 - **Docker Desktop** installed and running
-- **Anthropic API key** (free tier works — get one at https://console.anthropic.com)
+- **At least one model/provider key** if you want live LLM-backed planning:
+  - `GROQ_API_KEY`
+  - `OPENAI_API_KEY`
+  - `OPENROUTER_API_KEY`
 
 ### 1. Clone / copy the project
 ```bash
@@ -62,8 +65,10 @@ cd nexus-ops
 ### 2. Set your API key
 ```bash
 cp .env.example .env
-# Edit .env and paste your Anthropic API key:
-# ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxx
+# Edit .env and paste your provider keys:
+# GROQ_API_KEY=...
+# OPENAI_API_KEY=...
+# OPENROUTER_API_KEY=...
 ```
 
 ### 3. Start everything
@@ -94,7 +99,7 @@ source venv/bin/activate       # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Set env vars
-export ANTHROPIC_API_KEY=sk-ant-your-key
+export GROQ_API_KEY=your-key-here
 export EXECUTION_MODE=mock
 export REDIS_URL=redis://localhost:6379
 
@@ -108,6 +113,25 @@ npm install
 npm run dev
 # Opens on http://localhost:5173
 ```
+
+For split frontend-only development:
+```bash
+cp frontend/.env.example frontend/.env
+# Set VITE_API_URL and VITE_WS_URL to your backend host if it is not running locally.
+```
+
+### Vercel Deployment
+This repo is configured so the `frontend/` app can be deployed on Vercel directly.
+
+1. Create a new Vercel project from this GitHub repo.
+2. Leave the root structure as-is and let `vercel.json` handle the frontend build.
+3. Set these env vars in Vercel for the frontend project:
+   - `VITE_API_URL` = your hosted backend URL
+   - `VITE_WS_URL` = your hosted backend WebSocket URL
+   - `VITE_API_KEY` = optional demo key if your backend expects one
+4. Deploy.
+
+Important: the FastAPI backend is not a good fit for Vercel because this project uses long-lived WebSockets and stateful services. Host the backend on a separate service, then point the Vercel frontend to it.
 
 ### Redis (required for backend)
 ```bash
@@ -270,8 +294,13 @@ curl http://localhost:4566/_localstack/health
 cd frontend && npm install && npm run dev
 ```
 
+**Vercel frontend cannot reach the API:**
+- Make sure `VITE_API_URL` and `VITE_WS_URL` are set in the Vercel project.
+- Those values should point to the deployed backend, not `localhost`.
+- If you are testing locally, use `frontend/.env` or the repo-root `.env` instead.
+
 **API key errors:**
-- Make sure `.env` has `ANTHROPIC_API_KEY=sk-ant-...`
+- Make sure `.env` has at least one provider key such as `GROQ_API_KEY=...`
 - Without a key, the app runs in demo mode with pre-built plans
 
 ---

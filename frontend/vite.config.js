@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function loadEnvFile(filePath) {
   try {
@@ -19,8 +22,9 @@ function loadEnvFile(filePath) {
   }
 }
 
-loadEnvFile(path.resolve('..', '.env'))
-loadEnvFile(path.resolve('..', 'backend', '.env'))
+loadEnvFile(path.resolve(__dirname, '.env'))
+loadEnvFile(path.resolve(__dirname, '..', '.env'))
+loadEnvFile(path.resolve(__dirname, '..', 'backend', '.env'))
 
 const PROXY_TARGET = process.env.VITE_PROXY_TARGET || process.env.VITE_API_URL || 'http://127.0.0.1:8000'
 const WS_TARGET = PROXY_TARGET.replace(/^http/, 'ws')
