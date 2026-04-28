@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: nexus-ops-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: EXECUTION_MODE
+        value: mock
+      - key: DEPLOY_MODE
+        value: demo
+      - key: REDIS_URL
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_DEFAULT_REGION
+        value: us-east-1
+      - key: AWS_ENDPOINT_URL
+        sync: false
+      - key: AWS_AMI_ID
+        sync: false
+      - key: DEFAULT_AMI_ID
+        sync: false
+      - key: DEFAULT_SUBNET
+        sync: false
+      - key: DEFAULT_SECURITY_GROUP
+        sync: false
+      - key: REQUIRE_AUTH
+        value: "false"
+      - key: ADMIN_API_KEY
+        sync: false
+      - key: TASK_TIMEOUT_SECONDS
+        value: "1800"
+      - key: MAX_INSTANCES_PER_USER
+        value: "20"
+      - key: MAX_MONTHLY_BUDGET_USD
+        value: "500"
+      - key: MAX_CONCURRENT_TASKS
+        value: "10"

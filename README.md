@@ -133,6 +133,25 @@ This repo is configured so the `frontend/` app can be deployed on Vercel directl
 
 Important: the FastAPI backend is not a good fit for Vercel because this project uses long-lived WebSockets and stateful services. Host the backend on a separate service, then point the Vercel frontend to it.
 
+### Render Deployment
+The backend is configured for Render through `render.yaml`.
+
+1. Create a new Render Web Service from this repo.
+2. Let Render use `render.yaml` at the repo root.
+3. Add the backend secrets in Render:
+   - `GROQ_API_KEY`
+   - `OPENAI_API_KEY`
+   - `OPENROUTER_API_KEY`
+   - `REDIS_URL`
+   - any AWS-related values you need
+4. Keep `EXECUTION_MODE=mock` if you want a safe demo backend.
+5. Deploy.
+
+After Render gives you a backend URL, set these in Vercel:
+- `VITE_API_URL=https://your-render-service.onrender.com`
+- `VITE_WS_URL=wss://your-render-service.onrender.com`
+- `VITE_PROXY_TARGET` is only for local development
+
 ### Redis (required for backend)
 ```bash
 # Mac
@@ -298,6 +317,10 @@ cd frontend && npm install && npm run dev
 - Make sure `VITE_API_URL` and `VITE_WS_URL` are set in the Vercel project.
 - Those values should point to the deployed backend, not `localhost`.
 - If you are testing locally, use `frontend/.env` or the repo-root `.env` instead.
+
+**Render backend starts but task updates fail:**
+- Make sure `REDIS_URL` points to a reachable Redis instance.
+- The backend expects Redis for live task state and WebSocket pub/sub.
 
 **API key errors:**
 - Make sure `.env` has at least one provider key such as `GROQ_API_KEY=...`
